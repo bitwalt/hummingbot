@@ -89,6 +89,26 @@ class MQTTBridgeConfigMap(BaseClientModel):
     model_config = ConfigDict(title="mqtt_bridge")
 
 
+class TelegramConfigMap(BaseClientModel):
+    telegram_enabled: bool = Field(
+        default=False,
+        json_schema_extra={"prompt": lambda cm: "Enable/Disable Telegram integration"},
+    )
+    telegram_token: str = Field(
+        default="",
+        json_schema_extra={"prompt": lambda cm: "Enter your Telegram bot token (from BotFather)"},
+    )
+    telegram_chat_id: str = Field(
+        default="",
+        json_schema_extra={"prompt": lambda cm: "Enter your Telegram chat ID"},
+    )
+    telegram_autostart: bool = Field(
+        default=False,
+        json_schema_extra={"prompt": lambda cm: "Enable/Disable Telegram Autostart"},
+    )
+    model_config = ConfigDict(title="telegram")
+
+
 class MarketDataCollectionConfigMap(BaseClientModel):
     market_data_collection_enabled: bool = Field(
         default=False,
@@ -721,6 +741,10 @@ class ClientConfigMap(BaseClientModel):
     mqtt_bridge: MQTTBridgeConfigMap = Field(
         default=MQTTBridgeConfigMap(),
         description=('MQTT Bridge configuration.'),
+    )
+    telegram: TelegramConfigMap = Field(
+        default=TelegramConfigMap(),
+        description=('Telegram integration configuration.'),
     )
     send_error_logs: bool = Field(
         default=True,

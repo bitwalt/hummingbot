@@ -15,6 +15,7 @@ from .history_command import HistoryCommand
 from .import_command import ImportCommand
 from .mqtt_command import MQTTCommand
 from .order_book_command import OrderBookCommand
+from .telegram_command import TelegramCommand
 from .rate_command import RateCommand
 from .silly_commands import SillyCommands
 from .start_command import StartCommand
@@ -46,4 +47,5 @@ __all__ = [
     StopCommand,
     TickerCommand,
     MQTTCommand,
+    TelegramCommand,
 ]

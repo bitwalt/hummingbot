@@ -76,6 +76,9 @@ class HummingbotApplication(*commands):
         # MQTT management
         self._mqtt: Optional[MQTTGateway] = None
 
+        # Telegram management
+        self._telegram = None
+
         # Script configuration support
         self.script_config: Optional[str] = None
 
@@ -91,6 +94,10 @@ class HummingbotApplication(*commands):
         # MQTT Bridge (always available in both modes)
         if self.client_config_map.mqtt_bridge.mqtt_autostart:
             self.mqtt_start()
+
+        # Telegram integration (always available in both modes)
+        if self.client_config_map.telegram.telegram_autostart:
+            self.telegram_start()
 
     def _init_ui_components(self):
         """Initialize UI components (CLI, parser, etc.) for non-headless mode."""
