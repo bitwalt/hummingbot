@@ -19,6 +19,12 @@ if TYPE_CHECKING:
 MAX_MESSAGES_PER_MINUTE = 20
 MAX_MESSAGES_PER_SECOND = 3
 
+# Sensitive commands that should not be executed via Telegram
+BLOCKED_COMMANDS = {
+    "connect", "create", "import", "export", "exit", "kill_switch",
+    "config", "gateway", "paper_trade", "balance_limit"
+}
+
 
 class TelegramNotifier(NotifierBase):
     """
@@ -56,7 +62,21 @@ class TelegramNotifier(NotifierBase):
         self._last_command_time: Dict[str, float] = {}
         self._command_cooldown = 2.0  # seconds
 
+        # Configure pandas for Telegram display limits
+        self._configure_pandas_display()
+
         self.logger().info("TelegramNotifier initialized")
+
+    def _configure_pandas_display(self):
+        """Configure pandas display options for Telegram's character limits."""
+        try:
+            import pandas as pd
+            pd.set_option('display.max_rows', 50)
+            pd.set_option('display.max_columns', 10)
+            pd.set_option('display.width', 100)
+            pd.set_option('display.max_colwidth', 30)
+        except Exception as e:
+            self.logger().warning(f"Failed to configure pandas display: {str(e)}")
 
     async def _initialize_application(self):
         """Initialize the Telegram bot application."""
@@ -203,6 +223,49 @@ class TelegramNotifier(NotifierBase):
                 self.logger().error(f"Unexpected error sending Telegram message: {str(e)}")
                 break
 
+    def _is_command_allowed(self, command: str) -> bool:
+        """Check if a command is allowed to be executed via Telegram."""
+        # Extract base command (without arguments)
+        base_command = command.split()[0] if command else ""
+        return base_command.lower() not in BLOCKED_COMMANDS
+
+    async def _execute_command_safe(self, command: str) -> str:
+        """
+        Execute a command safely within the application's event loop.
+        This ensures commands are executed in the correct async context.
+        """
+        try:
+            # Check if command is allowed
+            if not self._is_command_allowed(command):
+                return f"⚠️ Command '{command}' is not allowed via Telegram for security reasons."
+
+            # Schedule command execution in the app's event loop
+            if hasattr(self._hb_app, 'ev_loop'):
+                # Execute in the main event loop
+                future = asyncio.run_coroutine_threadsafe(
+                    self._execute_command_async(command),
+                    self._hb_app.ev_loop
+                )
+                return future.result(timeout=10.0)
+            else:
+                # Fallback to direct execution
+                return await self._execute_command_async(command)
+
+        except asyncio.TimeoutError:
+            return "⏱️ Command execution timed out."
+        except Exception as e:
+            self.logger().error(f"Error executing command '{command}': {str(e)}")
+            return f"❌ Error executing command: {str(e)}"
+
+    async def _execute_command_async(self, command: str) -> str:
+        """Execute the command and capture output."""
+        try:
+            # Execute command through HummingbotApplication
+            self._hb_app._handle_command(command)
+            return f"✅ Command '{command}' executed successfully."
+        except Exception as e:
+            raise Exception(f"Command execution failed: {str(e)}")
+
     def _check_rate_limit(self) -> bool:
         """Check if we're within rate limits."""
         current_time = time.time()
@@ -294,12 +357,8 @@ class TelegramNotifier(NotifierBase):
             return
 
         try:
-            # Get status from hummingbot
-            if hasattr(self._hb_app, 'status'):
-                status_output = self._hb_app.status()
-                await update.message.reply_text(f"```\n{status_output}\n```", parse_mode=ParseMode.MARKDOWN)
-            else:
-                await update.message.reply_text("Status command not available")
+            result = await self._execute_command_safe("status")
+            await update.message.reply_text(result, parse_mode=ParseMode.MARKDOWN)
         except Exception as e:
             self.logger().error(f"Error getting status: {str(e)}")
             await update.message.reply_text(f"❌ Error: {str(e)}")
@@ -314,9 +373,8 @@ class TelegramNotifier(NotifierBase):
             return
 
         try:
-            # Execute history command
-            self._hb_app._handle_command("history")
-            await update.message.reply_text("✅ History command executed. Check your bot logs for details.")
+            result = await self._execute_command_safe("history")
+            await update.message.reply_text(result, parse_mode=ParseMode.MARKDOWN)
         except Exception as e:
             self.logger().error(f"Error getting history: {str(e)}")
             await update.message.reply_text(f"❌ Error: {str(e)}")
@@ -352,9 +410,8 @@ class TelegramNotifier(NotifierBase):
             return
 
         try:
-            # Execute balance command
-            self._hb_app._handle_command("balance")
-            await update.message.reply_text("✅ Balance command executed. Check your bot logs for details.")
+            result = await self._execute_command_safe("balance")
+            await update.message.reply_text(result, parse_mode=ParseMode.MARKDOWN)
         except Exception as e:
             self.logger().error(f"Error getting balance: {str(e)}")
             await update.message.reply_text(f"❌ Error: {str(e)}")
@@ -369,9 +426,8 @@ class TelegramNotifier(NotifierBase):
             return
 
         try:
-            # Execute pnl command
-            self._hb_app._handle_command("pnl")
-            await update.message.reply_text("✅ PnL command executed. Check your bot logs for details.")
+            result = await self._execute_command_safe("pnl")
+            await update.message.reply_text(result, parse_mode=ParseMode.MARKDOWN)
         except Exception as e:
             self.logger().error(f"Error getting pnl: {str(e)}")
             await update.message.reply_text(f"❌ Error: {str(e)}")
@@ -386,9 +442,8 @@ class TelegramNotifier(NotifierBase):
             return
 
         try:
-            # Start the bot
-            self._hb_app._handle_command("start")
-            await update.message.reply_text("▶️ *Starting bot...*", parse_mode=ParseMode.MARKDOWN)
+            result = await self._execute_command_safe("start")
+            await update.message.reply_text(f"▶️ *Starting bot...*\n{result}", parse_mode=ParseMode.MARKDOWN)
         except Exception as e:
             self.logger().error(f"Error starting bot: {str(e)}")
             await update.message.reply_text(f"❌ Error: {str(e)}")
@@ -403,9 +458,8 @@ class TelegramNotifier(NotifierBase):
             return
 
         try:
-            # Stop the bot
-            self._hb_app._handle_command("stop")
-            await update.message.reply_text("⏹️ *Stopping bot...*", parse_mode=ParseMode.MARKDOWN)
+            result = await self._execute_command_safe("stop")
+            await update.message.reply_text(f"⏹️ *Stopping bot...*\n{result}", parse_mode=ParseMode.MARKDOWN)
         except Exception as e:
             self.logger().error(f"Error stopping bot: {str(e)}")
             await update.message.reply_text(f"❌ Error: {str(e)}")
